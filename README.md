@@ -22,7 +22,7 @@ class ClassifiedSource(BaseModel):
 ## Схема работы
 
 ```mermaid
-flowchart TD
+flowchart LR
     A[Входной URL] --> B[Открыть страницу источника]
     B --> C{Страница доступна?}
     C -- Нет --> G[Вернуть classified=false]
