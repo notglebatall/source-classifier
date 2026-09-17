@@ -1,1 +1,22 @@
+[project]
+name = "source-classifier"
+version = "0.1.0"
+description = "LangGraph agent for classifying sources by URL"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.12",
+    "httpx>=0.27",
+    "ipykernel>=6.29",
+    "langchain-openai>=0.3",
+    "langgraph>=0.4",
+    "openpyxl>=3.1",
+    "pydantic>=2.10",
+    "python-dotenv>=1.0",
+]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent"]

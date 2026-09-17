@@ -219,3 +219,5 @@ data/*.xlsx
 
 # Streamlit
 .streamlit/secrets.toml
+
+uv.lock
