@@ -63,8 +63,9 @@ def _print_tool_status(name: str, arguments: dict[str, Any]) -> None:
     print(f"→ {message}…", flush=True)
 
 
-async def _call_storage_tool(name: str, arguments: dict[str, Any]) -> Any:
+async def _call_tool(name: str, arguments: dict[str, Any]) -> Any:
     _print_tool_status(name, arguments)
+    
     async with stdio_client(_server_parameters()) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
@@ -85,7 +86,7 @@ async def _call_storage_tool(name: str, arguments: dict[str, Any]) -> Any:
 
 
 async def _get_catalog() -> Any:
-    return await _call_storage_tool("get_catalog", {})
+    return await _call_tool("get_catalog", {})
 
 
 async def _inspect_values(
@@ -94,14 +95,14 @@ async def _inspect_values(
     search: str | None = None,
     limit: int = 20,
 ) -> Any:
-    return await _call_storage_tool(
+    return await _call_tool(
         "inspect_values",
         {"table": table, "column": column, "search": search, "limit": limit},
     )
 
 
 async def _run_sql(sql: str) -> Any:
-    return await _call_storage_tool("run_sql", {"sql": sql})
+    return await _call_tool("run_sql", {"sql": sql})
 
 
 def load_storage_tools() -> list[StructuredTool]:
