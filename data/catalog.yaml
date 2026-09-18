@@ -1,0 +1,211 @@
+version: 1
+database:
+  dialect: duckdb
+  default_currency: RUB
+  monetary_unit: million_rubles
+  latest_period_rule: >-
+    Последние N месяцев определяются относительно максимального доступного месяца
+    в используемой витрине, а не относительно текущей календарной даты.
+
+tables:
+  - name: dim_region
+    purpose: Географический справочник регионов присутствия банков.
+    grain: Одна строка на регион.
+    primary_key: [region_id]
+    inspectable_columns: [region_name, federal_district]
+    columns:
+      - name: region_id
+        type: integer
+        description: Технический идентификатор региона.
+      - name: region_name
+        type: string
+        description: Официальное название региона.
+      - name: federal_district
+        type: string
+        description: Федеральный округ, в который входит регион.
+
+  - name: dim_bank
+    purpose: Справочник банков и их постоянных характеристик.
+    grain: Одна строка на банк.
+    primary_key: [bank_id]
+    inspectable_columns: [bank_name, ownership_type, size_segment]
+    columns:
+      - name: bank_id
+        type: integer
+        description: Технический идентификатор банка.
+      - name: bank_name
+        type: string
+        description: Название банка.
+      - name: region_id
+        type: integer
+        description: Регион головного офиса; внешний ключ на dim_region.region_id.
+      - name: ownership_type
+        type: string
+        description: Тип владения — государственный, частный или региональный.
+      - name: size_segment
+        type: string
+        description: Размер банка — крупный, средний или малый.
+      - name: active_from
+        type: date
+        description: Первый месяц работы банка.
+      - name: active_to
+        type: date
+        nullable: true
+        description: Последний месяц работы; NULL означает, что банк действует.
+
+  - name: fact_balance_monthly
+    purpose: Ежемесячные показатели баланса банка.
+    grain: Одна строка на банк и календарный месяц.
+    primary_key: [report_month, bank_id]
+    date_semantics: Значения являются снимком на конец указанного календарного месяца.
+    inspectable_columns: []
+    columns:
+      - name: report_month
+        type: date
+        description: Календарный месяц в виде первого числа месяца.
+      - name: bank_id
+        type: integer
+        description: Внешний ключ на dim_bank.bank_id.
+      - name: assets_mln_rub
+        type: decimal
+        unit: million_rubles
+        description: Совокупные активы банка на конец месяца.
+      - name: liabilities_mln_rub
+        type: decimal
+        unit: million_rubles
+        description: Совокупные обязательства банка на конец месяца.
+      - name: capital_mln_rub
+        type: decimal
+        unit: million_rubles
+        description: Собственный капитал банка на конец месяца.
+      - name: loans_mln_rub
+        type: decimal
+        unit: million_rubles
+        description: Кредитный портфель банка на конец месяца.
+      - name: deposits_mln_rub
+        type: decimal
+        unit: million_rubles
+        description: Средства клиентов на конец месяца по данным баланса.
+
+  - name: fact_income_monthly
+    purpose: Доходы, расходы и прибыль банка за отдельный месяц.
+    grain: Одна строка на банк и календарный месяц.
+    primary_key: [period_month, bank_id]
+    date_semantics: Значения относятся только к указанному месяцу и не являются накопительным итогом.
+    data_quality: В декабре 2025 года намеренно отсутствует строка банка 12 для проверки полноты данных.
+    inspectable_columns: []
+    columns:
+      - name: period_month
+        type: date
+        description: Календарный месяц в виде первого числа месяца.
+      - name: bank_id
+        type: integer
+        description: Внешний ключ на dim_bank.bank_id.
+      - name: interest_income_mln_rub
+        type: decimal
+        unit: million_rubles
+        description: Процентные доходы за месяц.
+      - name: fee_income_mln_rub
+        type: decimal
+        unit: million_rubles
+        description: Комиссионные доходы за месяц.
+      - name: operating_expense_mln_rub
+        type: decimal
+        unit: million_rubles
+        description: Операционные расходы за месяц.
+      - name: net_profit_mln_rub
+        type: decimal
+        unit: million_rubles
+        description: Чистая прибыль за месяц.
+
+  - name: fact_customers_monthly
+    purpose: Количество клиентов, счетов и клиентские средства по сегментам.
+    grain: Одна строка на банк, календарный месяц и клиентский сегмент.
+    primary_key: [report_month, bank_id, customer_segment]
+    date_semantics: Значения являются снимком на конец указанного календарного месяца.
+    inspectable_columns: [customer_segment]
+    columns:
+      - name: report_month
+        type: date
+        description: Календарный месяц в виде первого числа месяца.
+      - name: bank_id
+        type: integer
+        description: Внешний ключ на dim_bank.bank_id.
+      - name: customer_segment
+        type: string
+        description: Сегмент клиента — розничный, малый и средний бизнес или корпоративный.
+      - name: active_customers
+        type: integer
+        unit: customers
+        description: Число активных клиентов на конец месяца.
+      - name: accounts
+        type: integer
+        unit: accounts
+        description: Число открытых счетов на конец месяца.
+      - name: deposits_mln_rub
+        type: decimal
+        unit: million_rubles
+        description: Средства клиентов данного сегмента на конец месяца.
+
+joins:
+  - left: dim_bank.region_id
+    right: dim_region.region_id
+    cardinality: many_to_one
+  - left: fact_balance_monthly.bank_id
+    right: dim_bank.bank_id
+    cardinality: many_to_one
+  - left: fact_income_monthly.bank_id
+    right: dim_bank.bank_id
+    cardinality: many_to_one
+  - left: fact_customers_monthly.bank_id
+    right: dim_bank.bank_id
+    cardinality: many_to_one
+  - left: fact_balance_monthly.[bank_id, report_month]
+    right: fact_income_monthly.[bank_id, period_month]
+    cardinality: one_to_one
+    condition: Использовать только совместимые месяцы и проверить полноту обеих витрин.
+  - left: fact_customers_monthly
+    right: fact_balance_monthly_or_fact_income_monthly
+    cardinality: aggregate_before_join
+    condition: >-
+      Сначала агрегировать клиентские данные до уровня bank_id + report_month,
+      иначе показатели другой витрины умножатся на число клиентских сегментов.
+
+metrics:
+  - name: total_assets
+    synonyms: [активы, совокупные активы, размер активов]
+    time_semantics: snapshot
+    unit: million_rubles
+    source: fact_balance_monthly.assets_mln_rub
+    aggregation: SUM(assets_mln_rub) в требуемом разрезе.
+  - name: average_sector_assets
+    synonyms: [средние активы сектора, средний размер активов банковского сектора]
+    time_semantics: snapshot
+    unit: million_rubles
+    source: fact_balance_monthly.assets_mln_rub
+    aggregation: >-
+      Сначала суммировать assets_mln_rub по всем подходящим банкам отдельно
+      для каждого месяца, затем вычислить среднее полученных месячных сумм.
+  - name: customer_funds
+    synonyms: [клиентские средства, средства клиентов, депозиты]
+    time_semantics: snapshot
+    unit: million_rubles
+    source: fact_customers_monthly.deposits_mln_rub
+    aggregation: SUM(deposits_mln_rub) по непересекающимся клиентским сегментам.
+  - name: net_profit
+    synonyms: [прибыль, чистая прибыль, финансовый результат]
+    time_semantics: flow
+    unit: million_rubles
+    source: fact_income_monthly.net_profit_mln_rub
+    aggregation: SUM(net_profit_mln_rub) за выбранные месяцы и банки.
+  - name: active_customers
+    synonyms: [активные клиенты, клиентская база]
+    time_semantics: snapshot
+    unit: customers
+    source: fact_customers_monthly.active_customers
+    aggregation: SUM(active_customers) по непересекающимся клиентским сегментам.
+
+quality_notes:
+  - Банк 12 начал работу в июле 2024 года и не имеет строк за более ранние месяцы.
+  - В fact_income_monthly намеренно нет банка 12 за декабрь 2025 года.
+  - Отсутствующую строку нельзя автоматически считать нулевым значением.
